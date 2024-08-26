@@ -4,11 +4,14 @@ import (
 	"cmp"
 	"errors"
 	"slices"
+
+	"eternal/internal/stack"
 )
 
 type NodeStorage[K cmp.Ordered, V any] interface {
 	GetRoot() (Node[K, V], error)
 	GetDepth() (uint, error)
+	SetDepth(uint) error
 	Get(id uint) (Node[K, V], error)
 	Persist(node Node[K, V]) error
 	Remove(id uint) error
@@ -56,23 +59,22 @@ func (t tree[K, V]) Get(key K) (V, error) {
 		}
 	}
 }
-func (t tree[K, V]) Insert(key K, value V) error {
-	var (
-		stack stack[uint]
-	)
+func (t *tree[K, V]) Insert(key K, value V) error {
+	path := stack.NewStack[uint](t.depth)
 	root, err := t.storage.GetRoot()
 	if err != nil {
 		return err
 	}
 	var currentNode = root
 	for {
-		stack.add(currentNode.id)
+		path.Push(currentNode.id)
 		found, position, _ := currentNode.values.find(key)
 		if found {
-			currentNode.values.add(tuple[K, V]{key, value})
-			return nil
+			currentNode.values[position] = tuple[K, V]{key, value}
+			return t.storage.Persist(currentNode)
 		}
 		if currentNode.leaf {
+			// we cannot persist currentNode as it can violate a-b rules
 			currentNode.values.add(tuple[K, V]{key, value})
 			break
 		}
@@ -88,7 +90,7 @@ func (t tree[K, V]) Insert(key K, value V) error {
 		if currentNode.values.count() < t.b {
 			return nil
 		}
-		if len(stack.values) == 0 {
+		if path.Empty() {
 			newNodeId, err := t.storage.NewId()
 			if err != nil {
 				return err
@@ -104,9 +106,13 @@ func (t tree[K, V]) Insert(key K, value V) error {
 			newRoot.values.add(middle)
 			newRoot.children = append(currentNode.children, newNode.id, oldNode.id)
 
-			return persistMultiple(t.storage, currentNode, oldNode, newNode)
+			if err := persistMultiple(t.storage, currentNode, oldNode, newNode); err != nil {
+				return err
+			}
+			t.depth++
+			return t.storage.SetDepth(t.depth)
 		} else {
-			parent, err := t.storage.Get(stack.pop())
+			parent, err := t.storage.Get(path.Pop())
 			if err != nil {
 				return err
 			}
@@ -138,26 +144,20 @@ func (t tree[K, V]) Insert(key K, value V) error {
 
 }
 
-func (t tree[K, V]) Delete(key K) error {
-	return nil
-}
-
-func (t tree[K, V]) splitNode(newNodeId uint, currentNode Node[K, V]) (Node[K, V], tuple[K, V], Node[K, V]) {
+func (t *tree[K, V]) splitNode(newNodeId uint, currentNode Node[K, V]) (Node[K, V], tuple[K, V], Node[K, V]) {
 	newNode := Node[K, V]{
-		id: newNodeId,
-		values: values[K, V]{
-			values: make([]tuple[K, V], 0, t.b),
-		},
+		id:       newNodeId,
+		values:   make([]tuple[K, V], 0, t.b),
 		children: make([]uint, 0, t.b+1),
 		leaf:     currentNode.leaf,
 	}
 	middleIndex := (t.b) / 2
-	middle := currentNode.values.values[middleIndex]
+	middle := currentNode.values[middleIndex]
 	for i := uint(0); i < middleIndex; i++ {
-		newNode.values.values = append(newNode.values.values, currentNode.values.values[i])
+		newNode.values = append(newNode.values, currentNode.values[i])
 		newNode.children = append(newNode.children, currentNode.children[i])
 
-		currentNode.values.values[i] = currentNode.values.values[1+i+middleIndex]
+		currentNode.values[i] = currentNode.values[1+i+middleIndex]
 		currentNode.children[i] = currentNode.children[1+i+middleIndex]
 	}
 	newNode.children = append(newNode.children, currentNode.children[middleIndex])
@@ -173,42 +173,34 @@ type Node[K cmp.Ordered, V any] struct {
 	leaf     bool
 }
 
-type values[K cmp.Ordered, V any] struct {
-	values []tuple[K, V]
+type values[K cmp.Ordered, V any] []tuple[K, V]
+
+func (values values[K, V]) count() uint {
+	return uint(len(values))
 }
 
-func (find values[K, V]) count() uint {
-	return uint(len(find.values))
-}
-
-func (find values[K, V]) find(key K) (bool, int, tuple[K, V]) {
-	position, found := slices.BinarySearchFunc(find.values, key, func(t tuple[K, V], k K) int {
+func (values values[K, V]) find(key K) (bool, int, tuple[K, V]) {
+	position, found := slices.BinarySearchFunc(values, key, func(t tuple[K, V], k K) int {
 		return cmp.Compare(t.first, k)
 	})
 	if found {
-		return true, position, find.values[position]
+		return true, position, values[position]
 	}
 
 	return false, position, tuple[K, V]{}
 }
 
 func (find *values[K, V]) add(value tuple[K, V]) {
-	if found, i, _ := find.find(value.first); found {
-		find.values[i] = value
-	} else {
-		find.values = append(find.values, value)
-		slices.SortFunc(find.values, func(a, b tuple[K, V]) int {
-			return cmp.Compare(a.first, b.first)
-		})
-	}
+	*find = append(*find, value)
+	slices.SortFunc(*find, func(a, b tuple[K, V]) int {
+		return cmp.Compare(a.first, b.first)
+	})
 }
 
 func createNewNode[K cmp.Ordered, V any](b, id uint, leaf bool) Node[K, V] {
 	return Node[K, V]{
-		id: id,
-		values: values[K, V]{
-			values: make([]tuple[K, V], 0, b),
-		},
+		id:       id,
+		values:   make([]tuple[K, V], 0, b),
 		children: make([]uint, 0, b+1),
 		leaf:     leaf,
 	}
@@ -217,25 +209,4 @@ func createNewNode[K cmp.Ordered, V any](b, id uint, leaf bool) Node[K, V] {
 type tuple[A, B any] struct {
 	first  A
 	second B
-}
-
-type stack[T any] struct {
-	values []T
-}
-
-func newStack[T any](size uint) *stack[T] {
-	return &stack[T]{
-		values: make([]T, 0, size),
-	}
-}
-
-func (receiver *stack[T]) pop() T {
-	index := len(receiver.values) - 1
-	value := receiver.values[index]
-	receiver.values = receiver.values[:index]
-	return value
-}
-
-func (receiver *stack[T]) add(value T) {
-	receiver.values = append(receiver.values, value)
 }
