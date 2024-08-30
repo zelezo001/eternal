@@ -5,7 +5,7 @@ import (
 	"errors"
 	"slices"
 
-	"eternal/internal/stack"
+	"github.com/zelezo001/eternal/internal/stack"
 )
 
 type NodeStorage[K cmp.Ordered, V any] interface {

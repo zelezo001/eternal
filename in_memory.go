@@ -3,13 +3,15 @@ package eternal
 import (
 	"cmp"
 	"errors"
+
+	"github.com/zelezo001/eternal/internal/stack"
 )
 
 const rootId = 0
 
 type InMemoryStorage[K cmp.Ordered, V any] struct {
 	nodes     map[uint]Node[K, V]
-	unusedIds stack[uint]
+	unusedIds *stack.Stack[uint]
 	idCap     uint
 }
 
@@ -18,7 +20,7 @@ func InMemory[K cmp.Ordered, V any](b uint) *InMemoryStorage[K, V] {
 		nodes: map[uint]Node[K, V]{
 			rootId: createNewNode[K, V](b, rootId, true),
 		},
-		unusedIds: stack[uint]{},
+		unusedIds: stack.NewStack[uint](0),
 		idCap:     0,
 	}
 }
@@ -51,17 +53,17 @@ func (i *InMemoryStorage[K, V]) Remove(id uint) error {
 	if id+1 == i.idCap {
 		i.idCap--
 	} else {
-		i.unusedIds.add(id)
+		i.unusedIds.Push(id)
 	}
 	return nil
 }
 
 func (i *InMemoryStorage[K, V]) NewId() (uint, error) {
-	if len(i.unusedIds.values) == 0 {
+	if i.unusedIds.Empty() {
 		id := i.idCap
 		i.idCap++
 		return id, nil
 	}
 
-	return i.unusedIds.pop(), nil
+	return i.unusedIds.Pop(), nil
 }

@@ -1,6 +1,6 @@
 package eternal
 
-import "eternal/internal/stack"
+import "github.com/zelezo001/eternal/internal/stack"
 
 func (t *tree[K, V]) Delete(key K) error {
 	path := stack.NewStack[deleteStep](t.depth)
