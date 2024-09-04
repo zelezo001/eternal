@@ -18,28 +18,20 @@ type arrayBlueprint struct {
 	element blueprint
 }
 
-func (a arrayBlueprint) from(bytes []byte, value reflect.Value) error {
+func (a arrayBlueprint) from(bytes []byte, value reflect.Value) {
 	var offset uint
 	for i := uint(0); i < a.length; i++ {
-		err := a.element.from(bytes[offset:], value.Index(int(i)))
-		if err != nil {
-			return err
-		}
+		a.element.from(bytes[offset:], value.Index(int(i)))
 		offset += a.element.size()
 	}
-	return nil
 }
 
-func (a arrayBlueprint) to(value reflect.Value, bytes []byte) error {
+func (a arrayBlueprint) to(value reflect.Value, bytes []byte) {
 	var offset uint
 	for i := uint(0); i < a.length; i++ {
-		err := a.element.to(value.Index(int(i)), bytes[offset:])
-		if err != nil {
-			return err
-		}
+		a.element.to(value.Index(int(i)), bytes[offset:])
 		offset += a.element.size()
 	}
-	return nil
 }
 
 func (a arrayBlueprint) size() uint {
@@ -49,17 +41,16 @@ func (a arrayBlueprint) size() uint {
 type boolBlueprint struct {
 }
 
-func (b boolBlueprint) from(bytes []byte, value reflect.Value) error {
+func (b boolBlueprint) from(bytes []byte, value reflect.Value) {
 	value.SetBool(bytes[0] != 0)
-	return nil
+	return
 }
 
-func (b boolBlueprint) to(value reflect.Value, bytes []byte) error {
+func (b boolBlueprint) to(value reflect.Value, bytes []byte) {
 	bytes[0] = 0
 	if value.Bool() {
 		bytes[0] = 1
 	}
-	return nil
 }
 
 func (b boolBlueprint) size() uint {
@@ -71,34 +62,26 @@ type sliceBlueprint struct {
 	element blueprint
 }
 
-func (s sliceBlueprint) from(bytes []byte, value reflect.Value) error {
+func (s sliceBlueprint) from(bytes []byte, value reflect.Value) {
 	realLength := toUint32(bytes)
 	bytes = bytes[4:] //
 	value.Grow(int(realLength))
 	value.SetLen(int(realLength))
 	var offset uint
 	for i := 0; i < int(realLength); i++ {
-		err := s.element.from(bytes[4+offset:], value.Index(i))
-		if err != nil {
-			return err
-		}
+		s.element.from(bytes[4+offset:], value.Index(i))
 		offset += s.element.size()
 	}
-	return nil
 }
 
-func (s sliceBlueprint) to(value reflect.Value, dest []byte) error {
+func (s sliceBlueprint) to(value reflect.Value, dest []byte) {
 	persistedLen := uint32(min(uint(value.Len()), uint(s.length)))
 	var offset uint
 	for i := 0; i < int(persistedLen); i++ {
-		err := s.element.to(value.Index(i), dest[4+offset:])
-		if err != nil {
-			return err
-		}
+		s.element.to(value.Index(i), dest[4+offset:])
 		offset += s.element.size()
 	}
 	fromUint32(persistedLen, dest)
-	return nil
 }
 
 func (s sliceBlueprint) size() uint {
@@ -109,7 +92,7 @@ type stringBlueprint struct {
 	length uint32 // length in bytes
 }
 
-func (s stringBlueprint) from(bytes []byte, value reflect.Value) error {
+func (s stringBlueprint) from(bytes []byte, value reflect.Value) {
 	realLength := toUint32(bytes)
 	bytes = bytes[4:]
 	builder := strings.Builder{}
@@ -118,10 +101,9 @@ func (s stringBlueprint) from(bytes []byte, value reflect.Value) error {
 		_ = builder.WriteByte(bytes[i]) // error never occur
 	}
 	value.SetString(builder.String())
-	return nil
 }
 
-func (s stringBlueprint) to(value reflect.Value, dest []byte) error {
+func (s stringBlueprint) to(value reflect.Value, dest []byte) {
 	reader := strings.NewReader(value.String())
 	var written uint32 = 0
 	for {
@@ -137,7 +119,6 @@ func (s stringBlueprint) to(value reflect.Value, dest []byte) error {
 		written += uint32(utf8.EncodeRune(dest[4+written:], runeToBeWritten))
 	}
 	fromUint32(written, dest)
-	return nil
 }
 
 func (s stringBlueprint) size() uint {
@@ -155,30 +136,20 @@ type structBlueprint struct {
 	totalSize  uint
 }
 
-func (s structBlueprint) from(bytes []byte, value reflect.Value) error {
+func (s structBlueprint) from(bytes []byte, value reflect.Value) {
 	var offset uint
 	for _, field := range s.fields {
-		err := field.from(bytes[offset:], value.Field(field.fieldIndex))
-		if err != nil {
-			return err
-		}
+		field.from(bytes[offset:], value.Field(field.fieldIndex))
 		offset += field.size()
 	}
-
-	return nil
 }
 
-func (s structBlueprint) to(value reflect.Value, bytes []byte) error {
+func (s structBlueprint) to(value reflect.Value, bytes []byte) {
 	var offset uint
 	for _, field := range s.fields {
-		err := field.to(value.Field(field.fieldIndex), bytes[offset:])
-		if err != nil {
-			return err
-		}
+		field.to(value.Field(field.fieldIndex), bytes[offset:])
 		offset += field.size()
 	}
-
-	return nil
 }
 
 func (s structBlueprint) size() uint {
@@ -196,26 +167,25 @@ func (p pointerBlueprint) size() uint {
 	return p.childSize + pointerSize
 }
 
-func (p pointerBlueprint) from(bytes []byte, value reflect.Value) error {
+func (p pointerBlueprint) from(bytes []byte, value reflect.Value) {
 	if bytes[0] == nilPointer {
 		value.SetZero()
-		return nil
+		return
 	}
 	// TODO: handle possible nil pointer
-	return p.element.from(bytes[pointerSize:], value.Elem())
+	p.element.from(bytes[pointerSize:], value.Elem())
 }
 
-func (p pointerBlueprint) to(value reflect.Value, dest []byte) error {
+func (p pointerBlueprint) to(value reflect.Value, dest []byte) {
 	if value.IsNil() {
 		dest[0] = nilPointer
-		return nil
 	}
-	return p.element.to(value.Elem(), dest[pointerSize:])
+	p.element.to(value.Elem(), dest[pointerSize:])
 }
 
 type blueprint interface {
-	from([]byte, reflect.Value) error
-	to(reflect.Value, []byte) error
+	from([]byte, reflect.Value)
+	to(reflect.Value, []byte)
 	size() uint
 }
 
@@ -228,12 +198,14 @@ func (s Serializer[T]) Size() uint {
 	return s.blueprint.size()
 }
 
-func (s Serializer[T]) Encode(value T) ([]byte, error) {
+func (s Serializer[T]) Encode(value T) []byte {
 	var data = make([]byte, s.size)
-	return data, s.blueprint.to(reflect.ValueOf(value), data)
+	s.blueprint.to(reflect.ValueOf(value), data)
+	return data
 }
 
-func (s Serializer[T]) Decode(bytes []byte) (T, error) {
+func (s Serializer[T]) Decode(bytes []byte) T {
 	var value T
-	return value, s.blueprint.from(bytes, reflect.ValueOf(&value))
+	s.blueprint.from(bytes, reflect.ValueOf(&value))
+	return value
 }

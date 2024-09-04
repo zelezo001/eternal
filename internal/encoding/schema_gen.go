@@ -54,14 +54,12 @@ func toUint64(src []byte) uint64 {
 
 type uint8Blueprint struct{}
 
-func (i uint8Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i uint8Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetUint(uint64(toUint8(bytes)))
-	return nil
 }
 
-func (i uint8Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i uint8Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint8(uint8(value.Uint()), bytes)
-	return nil
 }
 
 func (i uint8Blueprint) size() uint {
@@ -71,14 +69,12 @@ func (i uint8Blueprint) size() uint {
 type int8Blueprint struct{}
 
 
-func (i int8Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i int8Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetInt(int64(int8(toUint8(bytes))))
-	return nil
 }
 
-func (i int8Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i int8Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint8(uint8(int8(value.Int())), bytes)
-	return nil
 }
 
 func (i int8Blueprint) size() uint {
@@ -87,14 +83,12 @@ func (i int8Blueprint) size() uint {
 
 type uint16Blueprint struct{}
 
-func (i uint16Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i uint16Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetUint(uint64(toUint16(bytes)))
-	return nil
 }
 
-func (i uint16Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i uint16Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint16(uint16(value.Uint()), bytes)
-	return nil
 }
 
 func (i uint16Blueprint) size() uint {
@@ -104,14 +98,12 @@ func (i uint16Blueprint) size() uint {
 type int16Blueprint struct{}
 
 
-func (i int16Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i int16Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetInt(int64(int16(toUint16(bytes))))
-	return nil
 }
 
-func (i int16Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i int16Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint16(uint16(int16(value.Int())), bytes)
-	return nil
 }
 
 func (i int16Blueprint) size() uint {
@@ -120,14 +112,12 @@ func (i int16Blueprint) size() uint {
 
 type uint32Blueprint struct{}
 
-func (i uint32Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i uint32Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetUint(uint64(toUint32(bytes)))
-	return nil
 }
 
-func (i uint32Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i uint32Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint32(uint32(value.Uint()), bytes)
-	return nil
 }
 
 func (i uint32Blueprint) size() uint {
@@ -137,14 +127,12 @@ func (i uint32Blueprint) size() uint {
 type int32Blueprint struct{}
 
 
-func (i int32Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i int32Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetInt(int64(int32(toUint32(bytes))))
-	return nil
 }
 
-func (i int32Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i int32Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint32(uint32(int32(value.Int())), bytes)
-	return nil
 }
 
 func (i int32Blueprint) size() uint {
@@ -153,14 +141,12 @@ func (i int32Blueprint) size() uint {
 
 type uint64Blueprint struct{}
 
-func (i uint64Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i uint64Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetUint(uint64(toUint64(bytes)))
-	return nil
 }
 
-func (i uint64Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i uint64Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint64(uint64(value.Uint()), bytes)
-	return nil
 }
 
 func (i uint64Blueprint) size() uint {
@@ -170,14 +156,12 @@ func (i uint64Blueprint) size() uint {
 type int64Blueprint struct{}
 
 
-func (i int64Blueprint) from(bytes []byte, value reflect.Value) error {
+func (i int64Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetInt(int64(int64(toUint64(bytes))))
-	return nil
 }
 
-func (i int64Blueprint) to(value reflect.Value, bytes []byte) error {
+func (i int64Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint64(uint64(int64(value.Int())), bytes)
-	return nil
 }
 
 func (i int64Blueprint) size() uint {
@@ -186,14 +170,12 @@ func (i int64Blueprint) size() uint {
 
 type float32Blueprint struct{}
 
-func (f float32Blueprint) from(bytes []byte, value reflect.Value) error {
+func (f float32Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetFloat(float64(math.Float32frombits(toUint32(bytes))))
-	return nil
 }
 
-func (f float32Blueprint) to(value reflect.Value, bytes []byte) error {
+func (f float32Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint32(math.Float32bits(float32(value.Float())), bytes)
-	return nil
 }
 
 func (f float32Blueprint) size() uint {
@@ -202,14 +184,12 @@ func (f float32Blueprint) size() uint {
 
 type float64Blueprint struct{}
 
-func (f float64Blueprint) from(bytes []byte, value reflect.Value) error {
+func (f float64Blueprint) from(bytes []byte, value reflect.Value) {
 	value.SetFloat(float64(math.Float64frombits(toUint64(bytes))))
-	return nil
 }
 
-func (f float64Blueprint) to(value reflect.Value, bytes []byte) error {
+func (f float64Blueprint) to(value reflect.Value, bytes []byte) {
 	fromUint64(math.Float64bits(float64(value.Float())), bytes)
-	return nil
 }
 
 func (f float64Blueprint) size() uint {

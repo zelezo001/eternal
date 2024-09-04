@@ -23,14 +23,12 @@ import (
 const intTemplate = `
 type uint%[1]dBlueprint struct{}
 
-func (i uint%[1]dBlueprint) from(bytes []byte, value reflect.Value) error {
+func (i uint%[1]dBlueprint) from(bytes []byte, value reflect.Value) {
 	value.SetUint(uint64(toUint%[1]d(bytes)))
-	return nil
 }
 
-func (i uint%[1]dBlueprint) to(value reflect.Value, bytes []byte) error {
+func (i uint%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 	fromUint%[1]d(uint%[1]d(value.Uint()), bytes)
-	return nil
 }
 
 func (i uint%[1]dBlueprint) size() uint {
@@ -40,14 +38,12 @@ func (i uint%[1]dBlueprint) size() uint {
 type int%[1]dBlueprint struct{}
 
 
-func (i int%[1]dBlueprint) from(bytes []byte, value reflect.Value) error {
+func (i int%[1]dBlueprint) from(bytes []byte, value reflect.Value) {
 	value.SetInt(int64(int%[1]d(toUint%[1]d(bytes))))
-	return nil
 }
 
-func (i int%[1]dBlueprint) to(value reflect.Value, bytes []byte) error {
+func (i int%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 	fromUint%[1]d(uint%[1]d(int%[1]d(value.Int())), bytes)
-	return nil
 }
 
 func (i int%[1]dBlueprint) size() uint {
@@ -58,14 +54,12 @@ func (i int%[1]dBlueprint) size() uint {
 const floatTemplate = `
 type float%[1]dBlueprint struct{}
 
-func (f float%[1]dBlueprint) from(bytes []byte, value reflect.Value) error {
+func (f float%[1]dBlueprint) from(bytes []byte, value reflect.Value) {
 	value.SetFloat(float64(math.Float%[1]dfrombits(toUint%[1]d(bytes))))
-	return nil
 }
 
-func (f float%[1]dBlueprint) to(value reflect.Value, bytes []byte) error {
+func (f float%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 	fromUint%[1]d(math.Float%[1]dbits(float%[1]d(value.Float())), bytes)
-	return nil
 }
 
 func (f float%[1]dBlueprint) size() uint {
