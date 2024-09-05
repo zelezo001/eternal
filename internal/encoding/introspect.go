@@ -26,28 +26,27 @@ var parsedStructs sync.Map
 type Primitive interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
-		~float32 | ~float64 | ~complex64 | ~complex128
+		~float32 | ~float64 | ~complex64 | ~complex128 | ~bool
 }
 
-func CreateForPrimitive[T Primitive]() (Serializer[T], error) {
+func CreateForPrimitive[T Primitive]() Serializer[T] {
 	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{})
+	if err != nil {
+		// handleType() should not return errors for primitive
+		panic(err)
+	}
+	return Serializer[T]{
+		size:      size,
+		blueprint: blueprint,
+	}
+}
+
+func CreateForString[T ~string](maxLength uint32) (Serializer[T], error) {
+	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{length: maxLength})
 	return Serializer[T]{
 		size:      size,
 		blueprint: blueprint,
 	}, err
-}
-
-func CreateForString[T ~string](maxLength uint32) Serializer[T] {
-	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{length: maxLength})
-	if err != nil {
-		// handleType() should not return errors for string
-		panic(err)
-	}
-
-	return Serializer[T]{
-		size:      size,
-		blueprint: blueprint,
-	}
 }
 
 func CreateForStringSlice[T interface{ ~[]E }, E interface{ ~string | ~*string }](

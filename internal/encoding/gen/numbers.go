@@ -70,18 +70,16 @@ func (f float%[1]dBlueprint) size() uint {
 const complexTemplate = `
 type complex%[1]dBlueprint struct{}
 
-func (c complex%[1]dBlueprint) from(bytes []byte, value reflect.Value) error {
+func (c complex%[1]dBlueprint) from(bytes []byte, value reflect.Value) {
 	realPart := math.Float%[3]dfrombits(toUint%[3]d(bytes))
 	imagPart := math.Float%[3]dfrombits(toUint%[3]d(bytes[%[2]d/2:]))
 	value.SetComplex(complex128(complex(realPart, imagPart)))
-	return nil
 }
 
-func (c complex%[1]dBlueprint) to(value reflect.Value, bytes []byte) error {
+func (c complex%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 	casted := complex%[1]d(value.Complex())
 	fromUint%[3]d(math.Float%[3]dbits(real(casted)), bytes)
 	fromUint%[3]d(math.Float%[3]dbits(imag(casted)), bytes[%[2]d/2:])
-	return nil
 }
 
 func (c complex%[1]dBlueprint) size() uint {

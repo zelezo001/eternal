@@ -198,18 +198,16 @@ func (f float64Blueprint) size() uint {
 
 type complex64Blueprint struct{}
 
-func (c complex64Blueprint) from(bytes []byte, value reflect.Value) error {
+func (c complex64Blueprint) from(bytes []byte, value reflect.Value) {
 	realPart := math.Float32frombits(toUint32(bytes))
 	imagPart := math.Float32frombits(toUint32(bytes[8/2:]))
 	value.SetComplex(complex128(complex(realPart, imagPart)))
-	return nil
 }
 
-func (c complex64Blueprint) to(value reflect.Value, bytes []byte) error {
+func (c complex64Blueprint) to(value reflect.Value, bytes []byte) {
 	casted := complex64(value.Complex())
 	fromUint32(math.Float32bits(real(casted)), bytes)
 	fromUint32(math.Float32bits(imag(casted)), bytes[8/2:])
-	return nil
 }
 
 func (c complex64Blueprint) size() uint {
@@ -218,18 +216,16 @@ func (c complex64Blueprint) size() uint {
 
 type complex128Blueprint struct{}
 
-func (c complex128Blueprint) from(bytes []byte, value reflect.Value) error {
+func (c complex128Blueprint) from(bytes []byte, value reflect.Value) {
 	realPart := math.Float64frombits(toUint64(bytes))
 	imagPart := math.Float64frombits(toUint64(bytes[16/2:]))
 	value.SetComplex(complex128(complex(realPart, imagPart)))
-	return nil
 }
 
-func (c complex128Blueprint) to(value reflect.Value, bytes []byte) error {
+func (c complex128Blueprint) to(value reflect.Value, bytes []byte) {
 	casted := complex128(value.Complex())
 	fromUint64(math.Float64bits(real(casted)), bytes)
 	fromUint64(math.Float64bits(imag(casted)), bytes[16/2:])
-	return nil
 }
 
 func (c complex128Blueprint) size() uint {
