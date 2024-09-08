@@ -92,7 +92,7 @@ func (t *Tree[K, V]) Insert(key K, value V) error {
 
 }
 
-func persistMultiple[K cmp.Ordered, V any](storage NodeStorage[K, V], nodes ...node[K, V]) error {
+func persistMultiple[K cmp.Ordered, V any](storage NodeStorage[K, V], nodes ...Node[K, V]) error {
 	for _, n := range nodes {
 		if err := storage.Persist(n); err != nil {
 			return err
@@ -102,7 +102,7 @@ func persistMultiple[K cmp.Ordered, V any](storage NodeStorage[K, V], nodes ...n
 	return nil
 }
 
-func (t *Tree[K, V]) splitNode(newNodeId uint, currentNode node[K, V]) (node[K, V], encoding.Tuple[K, V], node[K, V]) {
+func (t *Tree[K, V]) splitNode(newNodeId uint, currentNode Node[K, V]) (Node[K, V], encoding.Tuple[K, V], Node[K, V]) {
 	newNode := createNewNode[K, V](t.b, newNodeId, currentNode.leaf)
 	middleIndex := (t.b) / 2
 	middle := currentNode.values[middleIndex]
@@ -119,8 +119,8 @@ func (t *Tree[K, V]) splitNode(newNodeId uint, currentNode node[K, V]) (node[K, 
 	return newNode, middle, currentNode
 }
 
-func createNewNode[K cmp.Ordered, V any](b, id uint, leaf bool) node[K, V] {
-	return node[K, V]{
+func createNewNode[K cmp.Ordered, V any](b, id uint, leaf bool) Node[K, V] {
+	return Node[K, V]{
 		id:       id,
 		values:   make([]encoding.Tuple[K, V], 0, b),
 		children: make([]uint, 0, b+1),

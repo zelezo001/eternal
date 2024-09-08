@@ -9,11 +9,11 @@ import (
 )
 
 type NodeStorage[K cmp.Ordered, V any] interface {
-	GetRoot() (node[K, V], error)
+	GetRoot() (Node[K, V], error)
 	GetDepth() uint
 	SetDepth(uint) error
-	Get(id uint) (node[K, V], error)
-	Persist(node node[K, V]) error
+	Get(id uint) (Node[K, V], error)
+	Persist(node Node[K, V]) error
 	Remove(id uint) error
 	NewId() (uint, error)
 }
@@ -59,7 +59,7 @@ func (t *Tree[K, V]) Get(key K) (V, error) {
 	}
 }
 
-type node[K cmp.Ordered, V any] struct {
+type Node[K cmp.Ordered, V any] struct {
 	id       uint
 	values   values[K, V]
 	children []uint

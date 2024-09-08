@@ -52,7 +52,7 @@ func (t *Tree[K, V]) popLargest(
 	visitedNodes *stack.Stack[deleteStep], nodeId uint, positionInParent uint,
 ) (encoding.Tuple[K, V], error) {
 	var (
-		currentNode node[K, V]
+		currentNode Node[K, V]
 		err         error
 	)
 	for {
@@ -73,7 +73,7 @@ func (t *Tree[K, V]) popLargest(
 	return value, nil
 }
 
-func (t *Tree[K, V]) merge(middleValuePosition uint, left, right node[K, V], parent *node[K, V]) error {
+func (t *Tree[K, V]) merge(middleValuePosition uint, left, right Node[K, V], parent *Node[K, V]) error {
 	// middleValuePosition equals position of the left child
 	_, parent.children = pop(parent.children, middleValuePosition+1)
 	var middleValue encoding.Tuple[K, V]
