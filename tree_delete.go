@@ -1,8 +1,11 @@
 package eternal
 
-import "github.com/zelezo001/eternal/internal/stack"
+import (
+	"github.com/zelezo001/eternal/internal/encoding"
+	"github.com/zelezo001/eternal/internal/stack"
+)
 
-func (t *tree[K, V]) Delete(key K) error {
+func (t *Tree[K, V]) Delete(key K) error {
 	path := stack.NewStack[deleteStep](t.depth)
 	root, err := t.storage.GetRoot()
 	if err != nil {
@@ -45,17 +48,17 @@ func (t *tree[K, V]) Delete(key K) error {
 	return t.balanceTreeAfterDelete(path)
 }
 
-func (t *tree[K, V]) popLargest(
+func (t *Tree[K, V]) popLargest(
 	visitedNodes *stack.Stack[deleteStep], nodeId uint, positionInParent uint,
-) (tuple[K, V], error) {
+) (encoding.Tuple[K, V], error) {
 	var (
-		currentNode Node[K, V]
+		currentNode node[K, V]
 		err         error
 	)
 	for {
 		currentNode, err = t.storage.Get(nodeId)
 		if err != nil {
-			return tuple[K, V]{}, err
+			return encoding.Tuple[K, V]{}, err
 		}
 		visitedNodes.Push(deleteStep{currentNode.id, positionInParent})
 		if currentNode.leaf {
@@ -70,10 +73,10 @@ func (t *tree[K, V]) popLargest(
 	return value, nil
 }
 
-func (t *tree[K, V]) merge(middleValuePosition uint, left, right Node[K, V], parent *Node[K, V]) error {
+func (t *Tree[K, V]) merge(middleValuePosition uint, left, right node[K, V], parent *node[K, V]) error {
 	// middleValuePosition equals position of the left child
 	_, parent.children = pop(parent.children, middleValuePosition+1)
-	var middleValue tuple[K, V]
+	var middleValue encoding.Tuple[K, V]
 	middleValue, parent.values = pop(parent.values, middleValuePosition)
 	left.values = append(append(left.values, middleValue), right.values...)
 	left.children = append(left.children, right.children...)
@@ -101,7 +104,7 @@ type deleteStep struct {
 	visitedNode, positionInParent uint
 }
 
-func (t *tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error {
+func (t *Tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error {
 	if path.Count() <= 1 {
 		// we don't need to balance tree with only root node
 		return nil
@@ -113,7 +116,7 @@ func (t *tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 	}
 	for {
 		if uint(len(node.values))+1 >= t.a {
-			// we fixed tree up to this node
+			//node does not need to be fixed, we can stop back tracing
 			return nil
 		}
 
@@ -132,7 +135,7 @@ func (t *tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 			if sibling.values.count() >= t.a {
 				// we can borrow value from brother
 				var (
-					valueFromSibling, valueFromParent tuple[K, V]
+					valueFromSibling, valueFromParent encoding.Tuple[K, V]
 					childFromSibling                  uint
 				)
 				valueFromSibling, sibling.values = popFirst(sibling.values)
@@ -158,7 +161,7 @@ func (t *tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 			if sibling.values.count() >= t.a {
 				// we can borrow value from brother
 				var (
-					valueFromSibling, valueFromParent tuple[K, V]
+					valueFromSibling, valueFromParent encoding.Tuple[K, V]
 					childFromSibling                  uint
 				)
 				valueFromSibling, sibling.values = popLast(sibling.values)
@@ -178,7 +181,8 @@ func (t *tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 		}
 		node = parent
 		if path.Count() <= 1 {
-			// root can only be merged with its children, no additional steps are need
+			// root can only be merged with its children, no additional steps are needed
+			return nil
 		}
 	}
 }

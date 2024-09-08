@@ -7,17 +7,18 @@ import (
 	"github.com/zelezo001/eternal/internal/stack"
 )
 
-const rootId = 0
-
 type InMemoryStorage[K cmp.Ordered, V any] struct {
-	nodes     map[uint]Node[K, V]
+	nodes     map[uint]node[K, V]
 	unusedIds *stack.Stack[uint]
 	idCap     uint
+	depth     uint
 }
+
+var _ NodeStorage[string, any] = &InMemoryStorage[string, any]{}
 
 func InMemory[K cmp.Ordered, V any](b uint) *InMemoryStorage[K, V] {
 	return &InMemoryStorage[K, V]{
-		nodes: map[uint]Node[K, V]{
+		nodes: map[uint]node[K, V]{
 			rootId: createNewNode[K, V](b, rootId, true),
 		},
 		unusedIds: stack.NewStack[uint](0),
@@ -25,19 +26,28 @@ func InMemory[K cmp.Ordered, V any](b uint) *InMemoryStorage[K, V] {
 	}
 }
 
-func (i *InMemoryStorage[K, V]) GetRoot() (Node[K, V], error) {
+func (i *InMemoryStorage[K, V]) GetDepth() uint {
+	return i.depth
+}
+
+func (i *InMemoryStorage[K, V]) SetDepth(depth uint) error {
+	i.depth = depth
+	return nil
+}
+
+func (i *InMemoryStorage[K, V]) GetRoot() (node[K, V], error) {
 	return i.nodes[rootId], nil
 }
 
-func (i *InMemoryStorage[K, V]) Get(id uint) (Node[K, V], error) {
+func (i *InMemoryStorage[K, V]) Get(id uint) (node[K, V], error) {
 	node, found := i.nodes[id]
 	if !found {
-		return Node[K, V]{}, errors.New("node not found")
+		return node[K, V]{}, errors.New("node not found")
 	}
 	return node, nil
 }
 
-func (i *InMemoryStorage[K, V]) Persist(node Node[K, V]) error {
+func (i *InMemoryStorage[K, V]) Persist(node node[K, V]) error {
 	i.nodes[node.id] = node
 	return nil
 }
