@@ -18,6 +18,24 @@ type arrayBlueprint struct {
 	element blueprint
 }
 
+func (a arrayBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("array(type=")
+	if err != nil {
+		return err
+	}
+	err = a.element.describe(builder)
+	if err != nil {
+		return err
+	}
+	_, err = builder.WriteString(fmt.Sprintf("length=%d", a.length))
+	if err != nil {
+		return err
+	}
+	_, err = builder.WriteString(")")
+
+	return err
+}
+
 func (a arrayBlueprint) from(bytes []byte, value reflect.Value) {
 	var offset uint
 	for i := uint(0); i < a.length; i++ {
@@ -41,6 +59,11 @@ func (a arrayBlueprint) size() uint {
 type boolBlueprint struct {
 }
 
+func (b boolBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("bool")
+	return err
+}
+
 func (b boolBlueprint) from(bytes []byte, value reflect.Value) {
 	value.SetBool(bytes[0] != 0)
 	return
@@ -60,6 +83,23 @@ func (b boolBlueprint) size() uint {
 type sliceBlueprint struct {
 	length  uint32
 	element blueprint
+}
+
+func (s sliceBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("slice(type=")
+	if err != nil {
+		return err
+	}
+	err = s.element.describe(builder)
+	if err != nil {
+		return err
+	}
+	_, err = builder.WriteString(fmt.Sprintf("length=%d", s.length))
+	if err != nil {
+		return err
+	}
+	_, err = builder.WriteString(")")
+	return err
 }
 
 func (s sliceBlueprint) from(bytes []byte, value reflect.Value) {
@@ -90,6 +130,11 @@ func (s sliceBlueprint) size() uint {
 
 type stringBlueprint struct {
 	length uint32 // length in bytes
+}
+
+func (s stringBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString(fmt.Sprintf("string(%d)", s.size()))
+	return err
 }
 
 func (s stringBlueprint) from(bytes []byte, value reflect.Value) {
@@ -136,6 +181,41 @@ type structBlueprint struct {
 	totalSize  uint
 }
 
+func (s structBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("struct(type=")
+	if err != nil {
+		return err
+	}
+	if written, _ := builder.WriteString(s.structType.PkgPath()); written > 0 {
+		_, err = builder.WriteString(":")
+		if err != nil {
+			return err
+		}
+	}
+	_, err = builder.WriteString(s.structType.Name())
+	if err != nil {
+		return err
+	}
+	_, err = builder.WriteString("fields=[")
+	if err != nil {
+		return err
+	}
+	for i, field := range s.fields {
+		if i > 0 {
+			_, err = builder.WriteString(",")
+			if err != nil {
+				return err
+			}
+		}
+		err = field.describe(builder)
+		if err != nil {
+			return err
+		}
+	}
+	_, err = builder.WriteString("])")
+	return nil
+}
+
 func (s structBlueprint) from(bytes []byte, value reflect.Value) {
 	var offset uint
 	for _, field := range s.fields {
@@ -163,6 +243,19 @@ type pointerBlueprint struct {
 	element   blueprint
 }
 
+func (p pointerBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("pointer(")
+	if err != nil {
+		return err
+	}
+	err = p.element.describe(builder)
+	if err != nil {
+		return err
+	}
+	_, err = builder.WriteString(")")
+	return err
+}
+
 func (p pointerBlueprint) size() uint {
 	return p.childSize + pointerSize
 }
@@ -183,29 +276,57 @@ func (p pointerBlueprint) to(value reflect.Value, dest []byte) {
 	p.element.to(value.Elem(), dest[pointerSize:])
 }
 
+type tupleBlueprint struct {
+	first, second blueprint
+}
+
+func (t tupleBlueprint) from(src []byte, dest reflect.Value) {
+	t.first.from(src, dest.Field(0))
+	t.second.from(src[t.first.size():], dest.Field(1))
+}
+
+func (t tupleBlueprint) to(src reflect.Value, dest []byte) {
+	t.first.to(src.Field(0), dest)
+	t.second.to(src.Field(1), dest[t.first.size():])
+}
+
+func (t tupleBlueprint) size() uint {
+	return t.first.size() + t.second.size()
+}
+
+func (t tupleBlueprint) describe(writer io.StringWriter) error {
+	_, err := writer.WriteString("tuple(first=")
+	if err != nil {
+		return err
+	}
+	err = t.first.describe(writer)
+	if err != nil {
+		return err
+	}
+	_, err = writer.WriteString(",second=")
+	if err != nil {
+		return err
+	}
+	err = t.second.describe(writer)
+	if err != nil {
+		return err
+	}
+	_, err = writer.WriteString(")")
+	return err
+}
+
 type blueprint interface {
-	from([]byte, reflect.Value)
-	to(reflect.Value, []byte)
+	// deserialize src value to dest
+	// provided length of src is at least value given from size
+	// content of src[size:] is not defined and should not be accounted for
+	// content of src should not be altered
+	from(src []byte, dest reflect.Value)
+	// serialize src value to dest
+	// provided length of dest is at least value given from size
+	// method must write only upto size bytes
+	to(src reflect.Value, dest []byte)
+	// size in bytes
 	size() uint
-}
-
-type Serializer[T any] struct {
-	blueprint blueprint
-	size      uint
-}
-
-func (s Serializer[T]) Size() uint {
-	return s.blueprint.size()
-}
-
-func (s Serializer[T]) Encode(value T) []byte {
-	var data = make([]byte, s.size)
-	s.blueprint.to(reflect.ValueOf(value), data)
-	return data
-}
-
-func (s Serializer[T]) Decode(bytes []byte) T {
-	var value T
-	s.blueprint.from(bytes, reflect.ValueOf(&value))
-	return value
+	// must uniquely describe given blueprint
+	describe(io.StringWriter) error
 }

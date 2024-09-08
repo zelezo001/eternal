@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	"io"
 	"math"
 	"reflect"
 )
@@ -66,6 +67,11 @@ func (i uint8Blueprint) size() uint {
 	return 1
 }
 
+func (b uint8Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("uint(8)")
+	return err
+}
+
 type int8Blueprint struct{}
 
 
@@ -81,6 +87,11 @@ func (i int8Blueprint) size() uint {
 	return 1
 }
 
+func (b int8Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("int(8)")
+	return err
+}
+
 type uint16Blueprint struct{}
 
 func (i uint16Blueprint) from(bytes []byte, value reflect.Value) {
@@ -93,6 +104,11 @@ func (i uint16Blueprint) to(value reflect.Value, bytes []byte) {
 
 func (i uint16Blueprint) size() uint {
 	return 2
+}
+
+func (b uint16Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("uint(16)")
+	return err
 }
 
 type int16Blueprint struct{}
@@ -110,6 +126,11 @@ func (i int16Blueprint) size() uint {
 	return 2
 }
 
+func (b int16Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("int(16)")
+	return err
+}
+
 type uint32Blueprint struct{}
 
 func (i uint32Blueprint) from(bytes []byte, value reflect.Value) {
@@ -122,6 +143,11 @@ func (i uint32Blueprint) to(value reflect.Value, bytes []byte) {
 
 func (i uint32Blueprint) size() uint {
 	return 4
+}
+
+func (b uint32Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("uint(32)")
+	return err
 }
 
 type int32Blueprint struct{}
@@ -139,6 +165,11 @@ func (i int32Blueprint) size() uint {
 	return 4
 }
 
+func (b int32Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("int(32)")
+	return err
+}
+
 type uint64Blueprint struct{}
 
 func (i uint64Blueprint) from(bytes []byte, value reflect.Value) {
@@ -151,6 +182,11 @@ func (i uint64Blueprint) to(value reflect.Value, bytes []byte) {
 
 func (i uint64Blueprint) size() uint {
 	return 8
+}
+
+func (b uint64Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("uint(64)")
+	return err
 }
 
 type int64Blueprint struct{}
@@ -168,6 +204,11 @@ func (i int64Blueprint) size() uint {
 	return 8
 }
 
+func (b int64Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("int(64)")
+	return err
+}
+
 type float32Blueprint struct{}
 
 func (f float32Blueprint) from(bytes []byte, value reflect.Value) {
@@ -182,6 +223,11 @@ func (f float32Blueprint) size() uint {
 	return 4
 }
 
+func (f float32Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("float(32)")
+	return err
+}
+
 type float64Blueprint struct{}
 
 func (f float64Blueprint) from(bytes []byte, value reflect.Value) {
@@ -194,6 +240,11 @@ func (f float64Blueprint) to(value reflect.Value, bytes []byte) {
 
 func (f float64Blueprint) size() uint {
 	return 8
+}
+
+func (f float64Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("float(64)")
+	return err
 }
 
 type complex64Blueprint struct{}
@@ -214,6 +265,11 @@ func (c complex64Blueprint) size() uint {
 	return 8
 }
 
+func (c complex64Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("complex(64)")
+	return err
+}
+
 type complex128Blueprint struct{}
 
 func (c complex128Blueprint) from(bytes []byte, value reflect.Value) {
@@ -230,4 +286,9 @@ func (c complex128Blueprint) to(value reflect.Value, bytes []byte) {
 
 func (c complex128Blueprint) size() uint {
 	return 16
+}
+
+func (c complex128Blueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("complex(128)")
+	return err
 }

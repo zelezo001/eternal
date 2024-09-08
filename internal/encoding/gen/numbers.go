@@ -14,6 +14,7 @@ var complexSizes = []int{64, 128}
 const header = `package encoding
 
 import (
+	"io"
 	"math"
 	"reflect"
 )
@@ -35,6 +36,11 @@ func (i uint%[1]dBlueprint) size() uint {
 	return %[2]d
 }
 
+func (b uint%[1]dBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("uint(%[1]d)")
+	return err
+}
+
 type int%[1]dBlueprint struct{}
 
 
@@ -48,6 +54,11 @@ func (i int%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 
 func (i int%[1]dBlueprint) size() uint {
 	return %[2]d
+}
+
+func (b int%[1]dBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("int(%[1]d)")
+	return err
 }
 `
 
@@ -64,6 +75,11 @@ func (f float%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 
 func (f float%[1]dBlueprint) size() uint {
 	return %[2]d
+}
+
+func (f float%[1]dBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("float(%[1]d)")
+	return err
 }
 `
 
@@ -84,6 +100,11 @@ func (c complex%[1]dBlueprint) to(value reflect.Value, bytes []byte) {
 
 func (c complex%[1]dBlueprint) size() uint {
 	return %[2]d
+}
+
+func (c complex%[1]dBlueprint) describe(builder io.StringWriter) error {
+	_, err := builder.WriteString("complex(%[1]d)")
+	return err
 }
 `
 

@@ -11,17 +11,12 @@ import (
 	"sync"
 )
 
-type context struct {
-	seenStructTypes map[reflect.Type]struct{} // prevents recursive definitions
-}
-
-var ErrUnsupportedType = errors.New("provided type is not supported")
-var ErrLengthMustBeSet = errors.New("cannot determine ")
-
-var ErrInvalidAnnotation = errors.New("tag had invalid format")
-var ErrRecursiveStructDefinition = errors.New("struct cannot contain itself")
-
-var parsedStructs sync.Map
+var (
+	ErrUnsupportedType           = errors.New("provided type is not supported")
+	ErrLengthMustBeSet           = errors.New("cannot determine ")
+	ErrInvalidAnnotation         = errors.New("tag had invalid format")
+	ErrRecursiveStructDefinition = errors.New("struct cannot contain itself")
+)
 
 type Primitive interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
@@ -80,14 +75,44 @@ func CreateForStruct[T any]() (Serializer[T], error) {
 	}, nil
 }
 
+func CreateSliceForSerializer[T any](serializer Serializer[T], maxLength uint32) (Serializer[[]T], error) {
+	if maxLength == 0 {
+		return Serializer[[]T]{}, ErrLengthMustBeSet
+	}
+	return Serializer[[]T]{
+		blueprint: sliceBlueprint{
+			length:  maxLength,
+			element: serializer.blueprint,
+		},
+		size: uint(maxLength) * serializer.size,
+	}, nil
+}
+
+type Tuple[F, S any] struct {
+	First  F
+	Second S
+}
+
+func CreateForTuple[F, S any](first Serializer[F], second Serializer[S]) Serializer[Tuple[F, S]] {
+	return Serializer[Tuple[F, S]]{
+		blueprint: tupleBlueprint{
+			first:  first.blueprint,
+			second: second.blueprint,
+		},
+		size: first.size + second.size,
+	}
+}
+
 type config struct {
 	length, elementLength uint32
 	ignore                bool // only used for struct fields
 }
 
-const separator = ";"
-const valueSeparator = ":"
-const tagName = "eternal"
+const (
+	separator      = ";"
+	valueSeparator = ":"
+	tagName        = "eternal"
+)
 
 func parseConfig(raw string) (config, error) {
 	var config config
@@ -125,6 +150,12 @@ func parseConfig(raw string) (config, error) {
 
 	return config, nil
 }
+
+type context struct {
+	seenStructTypes map[reflect.Type]struct{} // prevents recursive definitions
+}
+
+var parsedStructs sync.Map
 
 func handleType(ctx context, _type reflect.Type, blueprintConfig config) (blueprint, uint, error) {
 	switch _type.Kind() {
