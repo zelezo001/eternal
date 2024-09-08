@@ -41,13 +41,16 @@ type Tree[K cmp.Ordered, V any] struct {
 	storage NodeStorage[K, V]
 }
 
-func NewTree[K cmp.Ordered, V any](a, b uint, storage NodeStorage[K, V]) *Tree[K, V] {
+func NewTree[K cmp.Ordered, V any](a, b uint, storage NodeStorage[K, V]) (*Tree[K, V], error) {
+	if a < 2 || a*2-1 > b {
+		return nil, errors.New("a must be at least 2 and b at least a*2-1")
+	}
 	return &Tree[K, V]{
 		a:       a,
 		b:       b,
 		depth:   storage.GetDepth(),
 		storage: storage,
-	}
+	}, nil
 }
 
 var ErrNotFound = errors.New("value not found")
@@ -77,6 +80,11 @@ func (t *Tree[K, V]) Get(key K) (V, error) {
 			return emptyValue, err
 		}
 	}
+}
+
+func (t *Tree[K, V]) updateDepth(depth uint) error {
+	t.depth = depth
+	return t.storage.SetDepth(depth)
 }
 
 type Node[K cmp.Ordered, V any] struct {

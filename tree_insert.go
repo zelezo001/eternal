@@ -8,16 +8,17 @@ import (
 )
 
 func (t *Tree[K, V]) Insert(key K, value V) error {
-	path := stack.NewStack[uint](t.depth)
+	// path to leaf is always t.depth nodes and the last node is stored in currentNode
+	path := stack.NewStack[uint](t.depth - 1)
 	root, err := t.storage.GetRoot()
 	if err != nil {
 		return err
 	}
 	var currentNode = root
 	for {
-		path.Push(currentNode.id)
 		found, position, _ := currentNode.values.find(key)
 		if found {
+			// we don't change number of values in the tree, no back-tracing is needed
 			currentNode.values[position] = encoding.Tuple[K, V]{First: key, Second: value}
 			return t.storage.Persist(currentNode)
 		}
@@ -26,6 +27,7 @@ func (t *Tree[K, V]) Insert(key K, value V) error {
 			currentNode.values.add(encoding.Tuple[K, V]{First: key, Second: value})
 			break
 		}
+		path.Push(currentNode.id)
 		// presence of position is guarantied by nature of (a,b)-tree
 		var nextNodeId = currentNode.children[position]
 		currentNode, err = t.storage.Get(nextNodeId)
@@ -36,29 +38,31 @@ func (t *Tree[K, V]) Insert(key K, value V) error {
 
 	for {
 		if currentNode.values.count() < t.b {
-			return nil
+			// currentNode is either node with new value or parent from previous iteration.
+			//In both scenarios, we need to persist it.
+			return t.storage.Persist(currentNode)
 		}
 		if path.Empty() {
+			// currentNode is root
 			newNodeId, err := t.storage.NewId()
 			if err != nil {
 				return err
 			}
-			newNode, middle, oldNode := t.splitNode(newNodeId, currentNode)
-			replacedNodeId, err := t.storage.NewId()
+			newNode, middle, oldRoot := t.splitFullNode(newNodeId, currentNode)
+			oldRootNewId, err := t.storage.NewId()
 			if err != nil {
 				return err
 			}
-			newRoot := createNewNode[K, V](t.b, oldNode.id, false)
-			oldNode.id = replacedNodeId
-
+			// as by contract rootId is unknown, we will get its id from oldRoot
+			newRoot := createNewNode[K, V](t.b, oldRoot.id, false)
 			newRoot.values.add(middle)
-			newRoot.children = append(currentNode.children, newNode.id, oldNode.id)
+			newRoot.children = append(newRoot.children, newNode.id, oldRootNewId)
+			oldRoot.id = oldRootNewId
 
-			if err := persistMultiple(t.storage, currentNode, oldNode, newNode); err != nil {
+			if err := persistMultiple(t.storage, newRoot, oldRoot, newNode); err != nil {
 				return err
 			}
-			t.depth++
-			return t.storage.SetDepth(t.depth)
+			return t.updateDepth(t.depth + 1)
 		} else {
 			parent, err := t.storage.Get(path.Pop())
 			if err != nil {
@@ -69,20 +73,10 @@ func (t *Tree[K, V]) Insert(key K, value V) error {
 				return err
 			}
 
-			newNode, middle, oldNode := t.splitNode(newNodeId, currentNode)
-			parent.children = append(parent.children, 0)
-			var toReplace = len(parent.children)
-			for toReplace > 0 {
-				var copied = parent.children[toReplace-1]
-				parent.children[toReplace] = copied
-				if copied == oldNode.id {
-					toReplace--
-					parent.children[toReplace] = newNode.id
-				}
-				copied--
-			}
+			newNode, middle, oldNode := t.splitFullNode(newNodeId, currentNode)
+			parent.children = prependBefore(parent.children, newNode.id, oldNode.id)
 			parent.values.add(middle)
-			if err := persistMultiple(t.storage, parent, oldNode, newNode); err != nil {
+			if err := persistMultiple(t.storage, oldNode, newNode); err != nil {
 				return err
 			}
 
@@ -98,23 +92,30 @@ func persistMultiple[K cmp.Ordered, V any](storage NodeStorage[K, V], nodes ...N
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (t *Tree[K, V]) splitNode(newNodeId uint, currentNode Node[K, V]) (Node[K, V], encoding.Tuple[K, V], Node[K, V]) {
+func (t *Tree[K, V]) splitFullNode(newNodeId uint, currentNode Node[K, V]) (
+	Node[K, V], encoding.Tuple[K, V], Node[K, V],
+) {
 	newNode := createNewNode[K, V](t.b, newNodeId, currentNode.leaf)
 	middleIndex := (t.b) / 2
 	middle := currentNode.values[middleIndex]
 	for i := uint(0); i < middleIndex; i++ {
 		newNode.values = append(newNode.values, currentNode.values[i])
-		newNode.children = append(newNode.children, currentNode.children[i])
-
 		currentNode.values[i] = currentNode.values[1+i+middleIndex]
-		currentNode.children[i] = currentNode.children[1+i+middleIndex]
+
+		if !currentNode.leaf {
+			newNode.children = append(newNode.children, currentNode.children[i])
+			currentNode.children[i] = currentNode.children[1+i+middleIndex]
+		}
 	}
-	newNode.children = append(newNode.children, currentNode.children[middleIndex])
-	currentNode.children[middleIndex] = currentNode.children[t.b]
+	if !currentNode.leaf {
+		newNode.children = append(newNode.children, currentNode.children[middleIndex])
+		currentNode.children[middleIndex] = currentNode.children[t.b]
+		currentNode.children = currentNode.children[:middleIndex+1]
+	}
+	currentNode.values = currentNode.values[:middleIndex]
 
 	return newNode, middle, currentNode
 }

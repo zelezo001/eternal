@@ -11,10 +11,8 @@ func (t *Tree[K, V]) Delete(key K) error {
 	if err != nil {
 		return err
 	}
-	var (
-		currentNode           = root
-		positionInParent uint = 0
-	)
+	currentNode := root
+	var positionInParent uint
 	for {
 		path.Push(deleteStep{currentNode.id, positionInParent})
 		found, position, _ := currentNode.values.find(key)
@@ -28,6 +26,8 @@ func (t *Tree[K, V]) Delete(key K) error {
 			} else {
 				// presence of position is guarantied by nature of (a,b)-tree
 				leftChildId := currentNode.children[position]
+				// value is not stored in leaf, we must find predecessor to replace inner value
+				// predecessor definitely exists as largest value in every (sub)tree is always in leaf
 				valueToReplace, err := t.popLargest(path, leftChildId, uint(position))
 				if err != nil {
 					return err
@@ -35,6 +35,10 @@ func (t *Tree[K, V]) Delete(key K) error {
 				currentNode.values[position] = valueToReplace
 				break
 			}
+		}
+		if currentNode.leaf {
+			// key is not present in the tree
+			return nil
 		}
 		positionInParent = uint(position)
 		// presence of position is guarantied by nature of (a,b)-tree
@@ -68,31 +72,37 @@ func (t *Tree[K, V]) popLargest(
 		positionInParent = uint(len(currentNode.children) - 1)
 		nodeId = currentNode.children[positionInParent]
 	}
-	value := currentNode.values[len(currentNode.values)-1]
-	currentNode.values = currentNode.values[:len(currentNode.values)-1]
-	return value, nil
+
+	var value encoding.Tuple[K, V]
+	value, currentNode.values = popLast(currentNode.values)
+	return value, t.storage.Persist(currentNode)
 }
 
-func (t *Tree[K, V]) merge(middleValuePosition uint, left, right Node[K, V], parent *Node[K, V]) error {
+func (t *Tree[K, V]) merge(
+	middleValuePosition uint, left, right Node[K, V], parent *Node[K, V], parentIsRoot bool,
+) error {
 	// middleValuePosition equals position of the left child
 	_, parent.children = pop(parent.children, middleValuePosition+1)
 	var middleValue encoding.Tuple[K, V]
 	middleValue, parent.values = pop(parent.values, middleValuePosition)
 	left.values = append(append(left.values, middleValue), right.values...)
 	left.children = append(left.children, right.children...)
-	if len(parent.values) > 0 {
-		err := t.storage.Persist(*parent)
-		if err != nil {
-			return err
-		}
-	} else {
+	if parentIsRoot && len(parent.values) == 0 {
 		// parent is root with no stored value, left is the new root
 		err := t.storage.Remove(left.id)
 		if err != nil {
 			return err
 		}
 		left.id = parent.id
-		t.depth--
+		err = t.updateDepth(t.depth - 1)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := t.storage.Persist(*parent)
+		if err != nil {
+			return err
+		}
 	}
 	if err := t.storage.Remove(right.id); err != nil {
 		return err
@@ -125,8 +135,9 @@ func (t *Tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 		if err != nil {
 			return err
 		}
-
+		parentIsRoot := path.Empty()
 		if toCheck.positionInParent == 0 {
+			// there is no sibling on the left, we must choose right sibling
 			rightSiblingPosition := toCheck.positionInParent + 1
 			sibling, err := t.storage.Get(parent.children[rightSiblingPosition])
 			if err != nil {
@@ -139,15 +150,18 @@ func (t *Tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 					childFromSibling                  uint
 				)
 				valueFromSibling, sibling.values = popFirst(sibling.values)
-				childFromSibling, sibling.children = popFirst(sibling.children)
+				// position of middle value is equal to index of left node
 				valueFromParent = swap(parent.values, toCheck.positionInParent, valueFromSibling)
 				node.values = append(node.values, valueFromParent)
-				node.children = append(node.children, childFromSibling)
+				if !node.leaf {
+					childFromSibling, sibling.children = popFirst(sibling.children)
+					node.children = append(node.children, childFromSibling)
+				}
 				if err := persistMultiple(t.storage, sibling, parent, node); err != nil {
 					return err
 				}
 			} else {
-				err := t.merge(toCheck.positionInParent, node, sibling, &parent)
+				err := t.merge(toCheck.positionInParent, node, sibling, &parent, parentIsRoot)
 				if err != nil {
 					return err
 				}
@@ -160,27 +174,29 @@ func (t *Tree[K, V]) balanceTreeAfterDelete(path *stack.Stack[deleteStep]) error
 			}
 			if sibling.values.count() >= t.a {
 				// we can borrow value from brother
-				var (
-					valueFromSibling, valueFromParent encoding.Tuple[K, V]
-					childFromSibling                  uint
-				)
+				var valueFromSibling, valueFromParent encoding.Tuple[K, V]
 				valueFromSibling, sibling.values = popLast(sibling.values)
-				childFromSibling, sibling.children = popLast(sibling.children)
-				valueFromParent = swap(parent.values, toCheck.positionInParent, valueFromSibling)
+				// position of middle value is equal to index of left node
+				valueFromParent = swap(parent.values, leftSiblingPosition, valueFromSibling)
 				node.values = prepend(node.values, valueFromParent)
-				node.children = prepend(node.children, childFromSibling)
+				if !node.leaf {
+					var childFromSibling uint
+					childFromSibling, sibling.children = popLast(sibling.children)
+					node.children = prepend(node.children, childFromSibling)
+				}
 				if err := persistMultiple(t.storage, sibling, parent, node); err != nil {
 					return err
 				}
 			} else {
-				err := t.merge(toCheck.positionInParent, sibling, node, &parent)
+				err := t.merge(toCheck.positionInParent-1, sibling, node, &parent, parentIsRoot)
 				if err != nil {
 					return err
 				}
 			}
 		}
 		node = parent
-		if path.Count() <= 1 {
+		toCheck = parentStep
+		if parentIsRoot {
 			// root can only be merged with its children, no additional steps are needed
 			return nil
 		}

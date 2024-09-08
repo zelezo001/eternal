@@ -33,3 +33,23 @@ func prepend[S ~[]E, E any](slice S, value E) S {
 
 	return slice
 }
+
+// prependBefore
+// Prepend value before target in array. Value must be present in slice, otherwise prependBefore panics.
+// If target is present multiple times, value is prepended after the last one.
+func prependBefore[S ~[]E, E comparable](slice S, value, target E) S {
+	var emptyValue E
+	var toReplace = len(slice)
+	slice = append(slice, emptyValue)
+	for toReplace > 0 {
+		var copied = slice[toReplace-1]
+		slice[toReplace] = copied
+		if copied == target {
+			toReplace--
+			slice[toReplace] = value
+			return slice
+		}
+		toReplace--
+	}
+	panic("target not found")
+}

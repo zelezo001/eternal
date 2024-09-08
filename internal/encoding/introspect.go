@@ -25,7 +25,7 @@ type Primitive interface {
 }
 
 func CreateForPrimitive[T Primitive]() Serializer[T] {
-	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{})
+	blueprint, size, err := handleType(newContext(), reflect.TypeFor[T](), config{})
 	if err != nil {
 		// handleType() should not return errors for primitive
 		panic(err)
@@ -37,7 +37,7 @@ func CreateForPrimitive[T Primitive]() Serializer[T] {
 }
 
 func CreateForString[T ~string](maxLength uint32) (Serializer[T], error) {
-	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{length: maxLength})
+	blueprint, size, err := handleType(newContext(), reflect.TypeFor[T](), config{length: maxLength})
 	return Serializer[T]{
 		size:      size,
 		blueprint: blueprint,
@@ -48,7 +48,7 @@ func CreateForStringSlice[T interface{ ~[]E }, E interface{ ~string | ~*string }
 	maxLength uint32, maxStringLength uint32,
 ) (Serializer[T], error) {
 	config := config{length: maxLength, elementLength: maxStringLength}
-	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config)
+	blueprint, size, err := handleType(newContext(), reflect.TypeFor[T](), config)
 	return Serializer[T]{
 		size:      size,
 		blueprint: blueprint,
@@ -56,7 +56,7 @@ func CreateForStringSlice[T interface{ ~[]E }, E interface{ ~string | ~*string }
 }
 
 func CreateForSlice[T interface{ ~[]E }, E any](maxLength uint32) (Serializer[T], error) {
-	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{length: maxLength})
+	blueprint, size, err := handleType(newContext(), reflect.TypeFor[T](), config{length: maxLength})
 	return Serializer[T]{
 		size:      size,
 		blueprint: blueprint,
@@ -64,7 +64,7 @@ func CreateForSlice[T interface{ ~[]E }, E any](maxLength uint32) (Serializer[T]
 }
 
 func CreateForStruct[T any]() (Serializer[T], error) {
-	blueprint, size, err := handleType(context{}, reflect.TypeFor[T](), config{})
+	blueprint, size, err := handleType(newContext(), reflect.TypeFor[T](), config{})
 	if err != nil {
 		return Serializer[T]{}, err
 	}
@@ -106,6 +106,12 @@ func CreateForTuple[F, S any](first Serializer[F], second Serializer[S]) Seriali
 type config struct {
 	length, elementLength uint32
 	ignore                bool // only used for struct fields
+}
+
+func newContext() context {
+	return context{
+		seenStructTypes: make(map[reflect.Type]struct{}),
+	}
 }
 
 const (

@@ -22,7 +22,8 @@ func InMemory[K cmp.Ordered, V any](b uint) *InMemoryStorage[K, V] {
 			rootId: createNewNode[K, V](b, rootId, true),
 		},
 		unusedIds: stack.NewStack[uint](0),
-		idCap:     0,
+		idCap:     1,
+		depth:     1,
 	}
 }
 
