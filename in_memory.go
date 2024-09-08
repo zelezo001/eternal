@@ -42,7 +42,7 @@ func (i *InMemoryStorage[K, V]) GetRoot() (Node[K, V], error) {
 func (i *InMemoryStorage[K, V]) Get(id uint) (Node[K, V], error) {
 	node, found := i.nodes[id]
 	if !found {
-		return node[K, V]{}, errors.New("node not found")
+		return Node[K, V]{}, errors.New("node not found")
 	}
 	return node, nil
 }
