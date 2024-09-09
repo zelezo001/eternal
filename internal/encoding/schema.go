@@ -104,12 +104,12 @@ func (s sliceBlueprint) describe(builder io.StringWriter) error {
 
 func (s sliceBlueprint) from(bytes []byte, value reflect.Value) {
 	realLength := toUint32(bytes)
-	bytes = bytes[4:] //
+	bytes = bytes[4:] // size of uint32
 	value.Grow(int(realLength))
 	value.SetLen(int(realLength))
 	var offset uint
 	for i := 0; i < int(realLength); i++ {
-		s.element.from(bytes[4+offset:], value.Index(i))
+		s.element.from(bytes[offset:], value.Index(i))
 		offset += s.element.size()
 	}
 }
@@ -151,6 +151,7 @@ func (s stringBlueprint) from(bytes []byte, value reflect.Value) {
 func (s stringBlueprint) to(value reflect.Value, dest []byte) {
 	reader := strings.NewReader(value.String())
 	var written uint32 = 0
+	var stringDest = dest[4:] // 4 bytes for uint32 at the beginning
 	for {
 		runeToBeWritten, i, err := reader.ReadRune()
 		if errors.Is(err, io.EOF) || written+uint32(i) > s.length {
@@ -161,13 +162,13 @@ func (s stringBlueprint) to(value reflect.Value, dest []byte) {
 			panic(fmt.Sprintf("unknown error %s", err))
 		}
 		// first 4 bytes are for length
-		written += uint32(utf8.EncodeRune(dest[4+written:], runeToBeWritten))
+		written += uint32(utf8.EncodeRune(stringDest[written:], runeToBeWritten))
 	}
 	fromUint32(written, dest)
 }
 
 func (s stringBlueprint) size() uint {
-	return uint(s.length)
+	return uint(s.length) + 4
 }
 
 type structField struct {
@@ -265,14 +266,16 @@ func (p pointerBlueprint) from(bytes []byte, value reflect.Value) {
 		value.SetZero()
 		return
 	}
-	// TODO: handle possible nil pointer
+	value.Set(reflect.New(value.Type().Elem()))
 	p.element.from(bytes[pointerSize:], value.Elem())
 }
 
 func (p pointerBlueprint) to(value reflect.Value, dest []byte) {
 	if value.IsNil() {
 		dest[0] = nilPointer
+		return
 	}
+	dest[0] = 1
 	p.element.to(value.Elem(), dest[pointerSize:])
 }
 
