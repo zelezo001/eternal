@@ -46,8 +46,10 @@ if err != nil {
 ```
 Finally, create tree with prepared storage.
 ```go
-tree := eternal.NewTree[KeyType, ValueType](a,b, storage)
-
+tree, err := eternal.NewTree[KeyType, ValueType](a,b, storage)
+if err != nil {
+// handle err
+}
 ```
 
 Now you store, retrieve or delete values.

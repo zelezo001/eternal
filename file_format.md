@@ -20,9 +20,9 @@ Eternal file consists of three parts:
 Main purpose of header is to prevent corruption of data, either when system/version of eternal changes or
 when serialization strategy changes.
 
-Header occupies first 86 bytes of file and is consists of
+Header occupies first 98 bytes of file and is consists of
 
-| Range       | 0-6                        | 7-8                       | 9-12                                      | 13-76            | 77                      | 78-81       | 82-85       |
+| Range       | 0-6                        | 7-8                       | 9-16                                      | 17-80            | 81                      | 82-89       | 90-97       |
 |-------------|----------------------------|---------------------------|-------------------------------------------|------------------|-------------------------|-------------|-------------|
 | Description | "eternal" encoded as bytes | version of eternal format | block size provided when file was created | schema signature | system bit size - 32/64 | A parameter | B parameter |
 
