@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/zelezo001/eternal/internal/encoding"
+	"github.com/zelezo001/eternal/encoding"
 )
 
 // Defragment

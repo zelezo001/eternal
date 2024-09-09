@@ -72,7 +72,7 @@ func CreateForSlice[T interface{ ~[]E }, E any](maxLength uint32) (Serializer[T]
 	}, err
 }
 
-func CreateForStruct[T any]() (Serializer[T], error) {
+func Create[T any]() (Serializer[T], error) {
 	blueprint, err := handleType(newContext(), reflect.TypeFor[T](), config{})
 	if err != nil {
 		return Serializer[T]{}, err

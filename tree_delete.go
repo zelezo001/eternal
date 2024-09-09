@@ -1,7 +1,7 @@
 package eternal
 
 import (
-	"github.com/zelezo001/eternal/internal/encoding"
+	"github.com/zelezo001/eternal/encoding"
 	"github.com/zelezo001/eternal/internal/stack"
 )
 

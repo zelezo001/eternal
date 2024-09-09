@@ -5,7 +5,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/zelezo001/eternal/internal/encoding"
+	"github.com/zelezo001/eternal/encoding"
 )
 
 type NodeStorage[K cmp.Ordered, V any] interface {

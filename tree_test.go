@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/zelezo001/eternal/internal/encoding"
+	"github.com/zelezo001/eternal/encoding"
 )
 
 func createTreeWithInMemoryStorage[K cmp.Ordered, T any](a, b uint) (*Tree[K, T], *InMemoryStorage[K, T]) {

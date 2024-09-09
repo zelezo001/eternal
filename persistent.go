@@ -10,7 +10,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/zelezo001/eternal/internal/encoding"
+	"github.com/zelezo001/eternal/encoding"
 )
 
 type (
@@ -23,8 +23,8 @@ type (
 		Version    version
 		BlockSize  int64
 		Signature  signature
-		A, B       uint
 		System     byte // 64/32
+		A, B       uint64
 	}
 
 	File interface {
@@ -52,7 +52,7 @@ func checkHeader(header Header, schemaSignature signature, a, b uint) error {
 	if schemaSignature != header.Signature {
 		return errors.New("signature between current data type and data file differs")
 	}
-	if header.A != a || header.B != b {
+	if header.A != uint64(a) || header.B != uint64(b) {
 		return fmt.Errorf("data file was created for (%d,%d)-tree but current tree is (%d,%d)-tree", header.A, header.B,
 			a, b)
 	}
@@ -73,7 +73,7 @@ var _ NodeStorage[string, any] = &PersistentStorage[string, any]{}
 
 func init() {
 	var err error
-	headerSerializer, err = encoding.CreateForStruct[Header]()
+	headerSerializer, err = encoding.Create[Header]()
 	if err != nil {
 		panic(fmt.Errorf("could not create Header serializer: %w", err))
 	}
@@ -119,8 +119,8 @@ func (p *PersistentStorage[K, V]) checkFile(blockSize int64) error {
 		Version:    currentVersion,
 		BlockSize:  blockSize,
 		Signature:  schemaSignature,
-		A:          p.a,
-		B:          p.b,
+		A:          uint64(p.a),
+		B:          uint64(p.b),
 		System:     bits.UintSize,
 	}
 	_, err = p.file.Write(headerSerializer.Serialize(header))
@@ -167,24 +167,18 @@ func NewPersistentStorage[K cmp.Ordered, V any](
 
 	// we want nodes to be aligned with paddedNodeSize, so we can easily translate between address and id
 	metadataSize := uintSerializer.Size() * 2
-	var paddedNodeSize = calculatePaddedNodeSize(int64(nodeSize), blockSize)
-	var headerSizeInPaddedNodeSize = int64(metadataSize+headerSerializer.Size()) / paddedNodeSize
-	if int64(metadataSize+headerSerializer.Size())%paddedNodeSize != 0 {
-		headerSizeInPaddedNodeSize++
-	}
+	paddedNodeSize := calculatePaddedNodeSize(int64(nodeSize), blockSize)
 
 	depthAddress := int64(headerSerializer.Size())
 	freeIdAddress := depthAddress + int64(uintSerializer.Size())
-	var depth uint = 1
-	var freeId uint = 0
 	// we are loading tree which is already initialized, we have to load tree metadata
-	var metaBytes = make([]byte, uintSerializer.Size()*2)
+	metaBytes := make([]byte, uintSerializer.Size()*2)
 	_, err = file.Read(metaBytes)
 	if err != nil {
 		return nil, err
 	}
-	depth = uintSerializer.Deserialize(metaBytes)
-	freeId = uintSerializer.Deserialize(metaBytes[uintSerializer.Size():])
+	depth := uintSerializer.Deserialize(metaBytes)
+	freeId := uintSerializer.Deserialize(metaBytes[uintSerializer.Size():])
 
 	return &PersistentStorage[K, V]{
 		nodeSize:           int64(nodeSize),
@@ -193,7 +187,7 @@ func NewPersistentStorage[K cmp.Ordered, V any](
 		freeId:             freeId,
 		depthAddress:       depthAddress,
 		freeIdAddress:      freeIdAddress,
-		baseNodeAddress:    headerSizeInPaddedNodeSize * paddedNodeSize,
+		baseNodeAddress:    int64(metadataSize + headerSerializer.Size()),
 		valuesSerializer:   valuesEncoder,
 		childrenSerializer: childrenEncoder,
 		paddedNodeSize:     paddedNodeSize,
@@ -226,19 +220,10 @@ func (p *PersistentStorage[K, V]) GetDepth() uint {
 	return p.depth
 }
 
-// TODO remove
-func (p *PersistentStorage[K, V]) writeAtOffset(offset int64, data []byte) error {
-	_, err := p.file.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	_, err = p.file.Write(data)
-	return err
-}
-
 func (p *PersistentStorage[K, V]) SetDepth(depth uint) error {
 	p.depth = depth
-	return p.writeAtOffset(p.depthAddress, uintSerializer.Serialize(p.depth))
+	_, err := p.file.WriteAt(uintSerializer.Serialize(p.depth), p.depthAddress)
+	return err
 }
 
 var ErrMissingNode = errors.New("node not found")
@@ -343,7 +328,8 @@ func (p *PersistentStorage[K, V]) NewId() (uint, error) {
 
 func (p *PersistentStorage[K, V]) updateFreeId(id uint) error {
 	p.freeId = id
-	return p.writeAtOffset(p.freeIdAddress, uintSerializer.Serialize(id))
+	_, err := p.file.WriteAt(uintSerializer.Serialize(id), p.freeIdAddress)
+	return err
 }
 
 func (p *PersistentStorage[K, V]) idToOffset(id uint) int64 {
