@@ -125,7 +125,7 @@ func (s sliceBlueprint) to(value reflect.Value, dest []byte) {
 }
 
 func (s sliceBlueprint) size() uint {
-	return uint(s.length) * s.element.size()
+	return uint(s.length)*s.element.size() + 4 // 4 bytes for uint32
 }
 
 type stringBlueprint struct {
