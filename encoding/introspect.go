@@ -12,9 +12,13 @@ import (
 )
 
 var (
-	ErrUnsupportedType           = errors.New("provided type is not supported")
-	ErrLengthMustBeSet           = errors.New("cannot determine ")
-	ErrInvalidAnnotation         = errors.New("tag had invalid format")
+	// ErrUnsupportedType is from Create* methods if given type contains unsupported property (e.g. interface)
+	ErrUnsupportedType = errors.New("provided type is not supported")
+	// ErrLengthMustBeSet is from Create* methods if slice/string without bounds is encountered
+	ErrLengthMustBeSet = errors.New("cannot determine length")
+	// ErrInvalidAnnotation is from Create* methods if wrong tag definition for tag "eternal" is encountered
+	ErrInvalidAnnotation = errors.New("tag had invalid format")
+	// ErrRecursiveStructDefinition is from Create* methods if struct refers to itself (even via pointer or transitively)
 	ErrRecursiveStructDefinition = errors.New("struct cannot contain itself")
 )
 
@@ -61,17 +65,26 @@ func CreateForStringSlice[T interface{ ~[]E }, E interface{ ~string | ~*string }
 	}, err
 }
 
+// CreateForSlice
+// Fields in structs can be ignored by setting tag "eternal" on property to "ignored".
+// Slice/string fields can be bound by property size in tag "eternal" e.g. eternal:"size=10". This work up to one level with property "elementSize"
+// e.g. eternal:"size=10:elementSize=1"
 func CreateForSlice[T interface{ ~[]E }, E any](maxLength uint32) (Serializer[T], error) {
 	blueprint, err := handleType(newContext(), reflect.TypeFor[T](), config{length: maxLength})
 	if err != nil {
 		return Serializer[T]{}, err
 	}
+	size := blueprint.size()
 	return Serializer[T]{
-		size:      blueprint.size(),
+		size:      size,
 		blueprint: blueprint,
 	}, err
 }
 
+// Create
+// Fields in structs can be ignored by setting tag "eternal" on property to "ignored".
+// Slice/string fields can be bound by property size in tag "eternal" e.g. eternal:"size=10". This work up to one level with property "elementSize"
+// e.g. eternal:"size=10:elementSize=1"
 func Create[T any]() (Serializer[T], error) {
 	blueprint, err := handleType(newContext(), reflect.TypeFor[T](), config{})
 	if err != nil {
@@ -87,12 +100,13 @@ func CreateSliceForSerializer[T any](serializer Serializer[T], maxLength uint32)
 	if maxLength == 0 {
 		return Serializer[[]T]{}, ErrLengthMustBeSet
 	}
+	blueprint := sliceBlueprint{
+		length:  maxLength,
+		element: serializer.blueprint,
+	}
 	return Serializer[[]T]{
-		blueprint: sliceBlueprint{
-			length:  maxLength,
-			element: serializer.blueprint,
-		},
-		size: uint(maxLength) * serializer.size,
+		blueprint: blueprint,
+		size:      blueprint.size(),
 	}, nil
 }
 
@@ -102,12 +116,13 @@ type Tuple[F, S any] struct {
 }
 
 func CreateForTuple[F, S any](first Serializer[F], second Serializer[S]) Serializer[Tuple[F, S]] {
+	blueprint := tupleBlueprint{
+		first:  first.blueprint,
+		second: second.blueprint,
+	}
 	return Serializer[Tuple[F, S]]{
-		blueprint: tupleBlueprint{
-			first:  first.blueprint,
-			second: second.blueprint,
-		},
-		size: first.size + second.size,
+		blueprint: blueprint,
+		size:      blueprint.size(),
 	}
 }
 

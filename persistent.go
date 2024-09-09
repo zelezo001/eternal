@@ -16,20 +16,15 @@ import (
 type (
 	identifier = [7]byte
 	signature  = [64]byte
-	version    = int16
+	version    = uint16
 
-	Header struct {
+	header struct {
 		Identifier identifier
 		Version    version
 		BlockSize  int64
 		Signature  signature
 		System     byte // 64/32
 		A, B       uint64
-	}
-
-	File interface {
-		io.ReadWriteSeeker
-		io.Closer
 	}
 )
 
@@ -41,7 +36,23 @@ const (
 
 var eternalIdentifier = identifier{'e', 't', 'e', 'r', 'n', 'a', 'l'}
 
-func checkHeader(header Header, schemaSignature signature, a, b uint) error {
+var (
+	headerSerializer encoding.Serializer[header]
+	boolSerializer   = encoding.CreateForPrimitive[bool]()
+	uintSerializer   = encoding.CreateForPrimitive[uint]()
+
+	_ NodeStorage[string, any] = &PersistentStorage[string, any]{}
+)
+
+func init() {
+	var err error
+	headerSerializer, err = encoding.Create[header]()
+	if err != nil {
+		panic(fmt.Errorf("could not create header serializer: %w", err))
+	}
+}
+
+func checkHeader(header header, schemaSignature signature, a, b uint, blockSize int64) error {
 	if header.Identifier == eternalIdentifier {
 		return errors.New("file is not eternal data file")
 	}
@@ -60,23 +71,10 @@ func checkHeader(header Header, schemaSignature signature, a, b uint) error {
 		return fmt.Errorf("data file was created with %d bits uint, but current system uses %d bits uint",
 			header.System, bits.UintSize)
 	}
-	return nil
-}
-
-var (
-	headerSerializer encoding.Serializer[Header]
-	boolSerializer   = encoding.CreateForPrimitive[bool]()
-	uintSerializer   = encoding.CreateForPrimitive[uint]()
-)
-
-var _ NodeStorage[string, any] = &PersistentStorage[string, any]{}
-
-func init() {
-	var err error
-	headerSerializer, err = encoding.Create[Header]()
-	if err != nil {
-		panic(fmt.Errorf("could not create Header serializer: %w", err))
+	if header.BlockSize != blockSize {
+		return fmt.Errorf("data file was created for block size %d, block size %d given", header.BlockSize, blockSize)
 	}
+	return nil
 }
 
 func (p *PersistentStorage[K, V]) loadMetadata() error {
@@ -106,7 +104,7 @@ func (p *PersistentStorage[K, V]) checkFile(blockSize int64) error {
 	readHeaderBytes, err := p.file.Read(headerBytes)
 	if err == nil {
 		header := headerSerializer.Deserialize(headerBytes)
-		if err := checkHeader(header, schemaSignature, p.a, p.b); err != nil {
+		if err := checkHeader(header, schemaSignature, p.a, p.b, blockSize); err != nil {
 			return fmt.Errorf("header in provided file is not valid: %w", err)
 		}
 		return p.loadMetadata()
@@ -114,7 +112,7 @@ func (p *PersistentStorage[K, V]) checkFile(blockSize int64) error {
 		return fmt.Errorf("could not read header from data file: %w", err)
 	}
 	// file is empty, we must set default values
-	header := Header{
+	header := header{
 		Identifier: eternalIdentifier,
 		Version:    currentVersion,
 		BlockSize:  blockSize,
@@ -135,6 +133,13 @@ func (p *PersistentStorage[K, V]) checkFile(blockSize int64) error {
 	if err != nil {
 		return err
 	}
+	id, err := p.NewId()
+	if err != nil {
+		return err
+	}
+	if id != rootId {
+		return errors.New("first requested is should be root id")
+	}
 	return p.Persist(Node[K, V]{
 		id:       rootId,
 		values:   make(values[K, V], 0),
@@ -143,12 +148,16 @@ func (p *PersistentStorage[K, V]) checkFile(blockSize int64) error {
 	})
 }
 
+// NewPersistentStorage
+// Creates eternal persistent storage from provided file and config. If file already contains incompatible data, error is returned.
+// If file is empty, new storage is prepared in it. For file without block alignment, pass blockSize <= 0
 func NewPersistentStorage[K cmp.Ordered, V any](
 	a, b uint, blockSize int64, file *os.File, keySerializer encoding.Serializer[K],
 	valueSerializer encoding.Serializer[V],
 ) (
 	*PersistentStorage[K, V], error,
 ) {
+	blockSize = max(1, blockSize)
 	if b >= math.MaxUint32 {
 		return nil, errors.New("b parameter must be less than max uint32")
 	}
@@ -171,20 +180,10 @@ func NewPersistentStorage[K cmp.Ordered, V any](
 
 	depthAddress := int64(headerSerializer.Size())
 	freeIdAddress := depthAddress + int64(uintSerializer.Size())
-	// we are loading tree which is already initialized, we have to load tree metadata
-	metaBytes := make([]byte, uintSerializer.Size()*2)
-	_, err = file.Read(metaBytes)
-	if err != nil {
-		return nil, err
-	}
-	depth := uintSerializer.Deserialize(metaBytes)
-	freeId := uintSerializer.Deserialize(metaBytes[uintSerializer.Size():])
 
-	return &PersistentStorage[K, V]{
+	storage := &PersistentStorage[K, V]{
 		nodeSize:           int64(nodeSize),
 		file:               file,
-		depth:              depth,
-		freeId:             freeId,
 		depthAddress:       depthAddress,
 		freeIdAddress:      freeIdAddress,
 		baseNodeAddress:    int64(metadataSize + headerSerializer.Size()),
@@ -193,7 +192,8 @@ func NewPersistentStorage[K cmp.Ordered, V any](
 		paddedNodeSize:     paddedNodeSize,
 		a:                  a,
 		b:                  b,
-	}, nil
+	}
+	return storage, storage.checkFile(blockSize)
 }
 
 type PersistentStorage[K cmp.Ordered, V any] struct {
@@ -239,17 +239,20 @@ func (p *PersistentStorage[K, V]) Get(id uint) (Node[K, V], error) {
 	if err != nil {
 		return Node[K, V]{}, err
 	}
-	empty := boolSerializer.Deserialize(nodeData)
-	if empty {
+	inUse := boolSerializer.Deserialize(nodeData)
+	if !inUse {
 		return Node[K, V]{}, ErrMissingNode
 	}
 	nodeData = nodeData[boolSerializer.Size():]
 	values := p.valuesSerializer.Deserialize(nodeData)
 	children := p.childrenSerializer.Deserialize(nodeData[p.valuesSerializer.Size():])
+	if len(children) != 0 {
+		children = slices.Grow(children, int(p.b+1))
+	}
 	return Node[K, V]{
 		id:       id,
 		values:   slices.Grow(values, int(p.b)),
-		children: slices.Grow(children, int(p.b+1)),
+		children: children,
 		leaf:     len(children) == 0,
 	}, nil
 }
@@ -286,8 +289,12 @@ func (p *PersistentStorage[K, V]) Remove(id uint) error {
 	if err != nil {
 		return err
 	}
+	_, err = p.file.Write(uintSerializer.Serialize(p.freeId))
+	if err != nil {
+		return err
+	}
 
-	return err
+	return p.updateFreeId(id)
 }
 
 func (p *PersistentStorage[K, V]) NewId() (uint, error) {
@@ -333,12 +340,12 @@ func (p *PersistentStorage[K, V]) updateFreeId(id uint) error {
 }
 
 func (p *PersistentStorage[K, V]) idToOffset(id uint) int64 {
-	return p.baseNodeAddress + int64(id)*p.paddedNodeSize
+	return p.baseNodeAddress + int64(int(id))*p.paddedNodeSize
 }
 
 func calculatePaddedNodeSize(nodeSize, blockSize int64) int64 {
 	switch {
-	case blockSize == 1:
+	case blockSize <= 1:
 		return nodeSize
 	case nodeSize >= blockSize:
 		blocksPerNode := nodeSize / blockSize
@@ -350,7 +357,8 @@ func calculatePaddedNodeSize(nodeSize, blockSize int64) int64 {
 		return nodeSize
 	default: // nodeSize < blockSize
 		paddedNodeSize := blockSize
-		for paddedNodeSize/nodeSize > 1 {
+		// check for even, because dividing odd number would break alignment to blockSize
+		for paddedNodeSize/nodeSize > 1 && paddedNodeSize&1 == 0 {
 			paddedNodeSize /= 2
 		}
 		return paddedNodeSize

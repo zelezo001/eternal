@@ -47,13 +47,16 @@ func (p *PersistentStorage[K, V]) Defragment() error {
 			}
 			return err
 		}
+		var persist bool
 		for i := 0; i < len(reorderedNode.children); i++ {
 			// we only want to move nodes which are after freeBlock, otherwise we would create empty blocks
 			// in the already defragmented part
 			if freeBlock.First < reorderedNode.children[i] {
+				persist = true
 				err := p.moveNode(reorderedNode.children[i], freeBlock.First)
 				if err != nil {
-					if persistErr := p.Persist(reorderedNode); persistErr != nil {
+					// something happened during move, we should be able to save defragmentation progress
+					if persistErr := p.persistWithoutValues(reorderedNode); persistErr != nil {
 						err = errors.Join(persistErr, err)
 					}
 					return err
@@ -63,15 +66,22 @@ func (p *PersistentStorage[K, V]) Defragment() error {
 				if freeBlock.First > freeBlock.Second {
 					freeBlock, err = p.findEmptyBlock(freeBlock.Second + 1)
 					if err != nil {
-						if persistErr := p.Persist(reorderedNode); persistErr != nil {
+						// something happened when looking for free block, try persisting changes,
+						//so we don't lost progress
+						if persistErr := p.persistWithoutValues(reorderedNode); persistErr != nil {
 							err = errors.Join(persistErr, err)
 						}
 						return err
 					}
 					if freeBlock.Second == 0 {
-						return errors.New("there should be at least one free block")
+						return errors.New("reordering cannot remove free blocks, just rearrange them")
 					}
 				}
+			}
+		}
+		if persist {
+			if persistErr := p.persistWithoutValues(reorderedNode); persistErr != nil {
+				err = errors.Join(persistErr, err)
 			}
 		}
 	}
@@ -90,6 +100,15 @@ func (p *PersistentStorage[K, V]) moveNode(oldId, newId uint) error {
 		return err
 	}
 	_, err = p.file.WriteAt(node, p.idToOffset(newId))
+	if err != nil {
+		return err
+	}
+	// mark old as deleted without freeId chain as ve move nodes only during defragmentation
+	// do this as the last step, so we don't lose moved node
+	_, err = p.file.WriteAt(boolSerializer.Serialize(false), p.idToOffset(oldId))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -119,13 +138,13 @@ func (p *PersistentStorage[K, V]) loadWithoutValues(id uint) (Node[K, V], error)
 	if err != nil {
 		return Node[K, V]{}, err
 	}
-	var emptyData = make([]byte, boolSerializer.Size())
-	_, err = p.file.Read(emptyData)
+	var inUseData = make([]byte, boolSerializer.Size())
+	_, err = p.file.Read(inUseData)
 	if err != nil {
 		return Node[K, V]{}, err
 	}
-	empty := boolSerializer.Deserialize(emptyData)
-	if empty {
+	inUse := boolSerializer.Deserialize(inUseData)
+	if !inUse {
 		return Node[K, V]{}, ErrMissingNode
 	}
 	// skip memory where values are stored
@@ -134,6 +153,10 @@ func (p *PersistentStorage[K, V]) loadWithoutValues(id uint) (Node[K, V], error)
 		return Node[K, V]{}, err
 	}
 	var childrenData = make([]byte, p.childrenSerializer.Size())
+	_, err = p.file.Read(childrenData)
+	if err != nil {
+		return Node[K, V]{}, err
+	}
 	children := p.childrenSerializer.Deserialize(childrenData)
 	return Node[K, V]{
 		id:       id,

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/zelezo001/eternal/encoding"
 )
 
@@ -82,6 +83,7 @@ func TestTree(t *testing.T) {
 		expectedNodeCount: 7,
 	}
 	checker.checkTree()
+	assert.Equal(t, len(checker.checkedNodes), len(storage.nodes))
 
 	const deletedKey = "KEY_4"
 	err := tree.Delete(deletedKey)
@@ -99,6 +101,7 @@ func TestTree(t *testing.T) {
 		expectedNodeCount: 4,
 	}
 	checker.checkTree()
+	assert.Equal(t, len(checker.checkedNodes), len(storage.nodes))
 }
 
 func TestTree_3_5(t *testing.T) {
@@ -124,14 +127,16 @@ func TestTree_3_5(t *testing.T) {
 			t.Fatalf("failed inserting value: %s", err)
 		}
 	}
-	(&treeChecker[int64, int64]{
+	checker := &treeChecker[int64, int64]{
 		testing:       t,
 		storage:       storage,
 		expectedDepth: 0,
 		a:             a,
 		b:             b,
 		checkedNodes:  make(map[uint]struct{}),
-	}).checkTree()
+	}
+	checker.checkTree()
+	assert.Equal(t, len(checker.checkedNodes), len(storage.nodes))
 
 	for _, value := range toDelete {
 		err := tree.Delete(value)
@@ -140,23 +145,27 @@ func TestTree_3_5(t *testing.T) {
 		}
 	}
 
-	(&treeChecker[int64, int64]{
+	checker = &treeChecker[int64, int64]{
 		testing:       t,
 		storage:       storage,
 		expectedDepth: 0,
 		a:             a,
 		b:             b,
 		checkedNodes:  make(map[uint]struct{}),
-	}).checkTree()
+	}
+	checker.checkTree()
+	assert.Equal(t, len(checker.checkedNodes), len(storage.nodes))
 }
 
 type treeChecker[K cmp.Ordered, V any] struct {
-	testing           *testing.T
-	storage           NodeStorage[K, V]
-	expectedDepth     uint // set to zero for avoiding global depth test
-	a, b              uint
-	checkedNodes      map[uint]struct{}
-	expectedNodeCount int
+	testing            *testing.T
+	storage            NodeStorage[K, V]
+	expectedDepth      uint // set to zero for avoiding global depth test
+	a, b               uint
+	checkedNodes       map[uint]struct{}
+	expectedNodeCount  int
+	expectedValueCount int
+	valueCount         int
 }
 
 func (t *treeChecker[K, V]) checkTree() {
@@ -175,6 +184,9 @@ func (t *treeChecker[K, V]) checkTree() {
 	if t.expectedNodeCount != 0 && len(t.checkedNodes) != t.expectedNodeCount {
 		t.testing.Fatalf("expected exactly %d nodes, %d nodes found", t.expectedNodeCount, len(t.checkedNodes))
 	}
+	if t.expectedValueCount != 0 && t.expectedValueCount != t.valueCount {
+		t.testing.Fatalf("expected exactly %d values, %d values found", t.expectedValueCount, t.valueCount)
+	}
 }
 
 func (t *treeChecker[K, V]) checkNode(nodeId, depth uint, min, max *K) {
@@ -187,6 +199,7 @@ func (t *treeChecker[K, V]) checkNode(nodeId, depth uint, min, max *K) {
 	if err != nil {
 		t.testing.Fatalf("could not fetch node %d due to: %s", nodeId, err)
 	}
+	t.valueCount += len(node.values)
 	if node.leaf && len(node.children) != 0 {
 		t.testing.Fatalf("node %d is leaf with children", nodeId)
 	}
